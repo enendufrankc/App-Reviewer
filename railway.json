@@ -1,0 +1,21 @@
+{
+  "monorepo": true,
+  "services": [
+    {
+      "name": "backend",
+      "source": "backend/",
+      "build": {
+        "builder": "dockerfile",
+        "dockerfilePath": "backend/Dockerfile"
+      }
+    },
+    {
+      "name": "frontend", 
+      "source": "frontend/",
+      "build": {
+        "builder": "dockerfile",
+        "dockerfilePath": "frontend/Dockerfile"
+      }
+    }
+  ]
+}
