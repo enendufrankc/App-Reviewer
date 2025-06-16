@@ -1,13 +1,12 @@
 import axios from 'axios';
 
-// Get API URL from environment or use default
+// For production, API calls go through nginx proxy to /api
+// For development, direct calls to backend
 const getApiUrl = () => {
-  // For production, use the backend service URL from Railway
   if (import.meta.env.PROD) {
-    return import.meta.env.VITE_API_URL || '/api/v1';
+    return '/api/v1'; // Proxied through nginx
   }
-  // For development
-  return 'http://localhost:8000/api/v1';
+  return 'http://localhost:8000/api/v1'; // Direct to backend in dev
 };
 
 const api = axios.create({

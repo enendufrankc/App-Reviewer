@@ -153,17 +153,22 @@ async def evaluate_candidates_from_path(csv_path: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Processing error: {str(e)}")
 
-@router.get("/health")
+@app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    credentials_path = Path("credentials.json")
+    """Health check endpoint for Railway deployment"""
     return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "service": "app-reviewer-backend",
-        "version": "1.0.0",
+        "status": "healthy", 
+        "message": "App Reviewer Backend is running",
         "ffmpeg_available": shutil.which("ffmpeg") is not None,
-        "credentials_configured": credentials_path.exists()
+    }
+
+@app.get("/api/v1/health")
+async def api_health_check():
+    """API health check endpoint"""
+    return {
+        "status": "healthy", 
+        "message": "App Reviewer API is running",
+        "version": "1.0.0"
     }
 
 @router.get("/eligibility-criteria")

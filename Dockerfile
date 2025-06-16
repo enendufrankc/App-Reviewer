@@ -4,15 +4,17 @@ FROM node:18-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
 COPY frontend/bun.lockb ./
+
+# Install dependencies using npm (Railway supports npm better than bun)
 RUN npm install
 
 COPY frontend/ ./
 RUN npm run build
 
-# Python backend with nginx
+# Python backend stage
 FROM python:3.11-slim
 
-# Install system dependencies
+# Install system dependencies including ffmpeg
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     wget \
@@ -34,12 +36,14 @@ COPY backend/ .
 # Copy frontend build
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 
-# Create nginx config
+# Create nginx configuration
 RUN echo 'events { worker_connections 1024; } \
 http { \
     include /etc/nginx/mime.types; \
     default_type application/octet-stream; \
     client_max_body_size 100M; \
+    gzip on; \
+    gzip_types text/plain text/css application/json application/javascript; \
     server { \
         listen 80; \
         location / { \
@@ -49,7 +53,9 @@ http { \
         location /api/ { \
             proxy_pass http://127.0.0.1:8000; \
             proxy_set_header Host $host; \
+            proxy_set_header X-Real-IP $remote_addr; \
             proxy_read_timeout 300s; \
+            proxy_connect_timeout 75s; \
         } \
         location /health { \
             return 200 "healthy"; \
@@ -58,20 +64,28 @@ http { \
     } \
 }' > /etc/nginx/nginx.conf
 
-# Create supervisor config
+# Create supervisor configuration
 RUN echo '[supervisord] \
 nodaemon=true \
 [program:nginx] \
 command=nginx -g "daemon off;" \
+autostart=true \
+autorestart=true \
 [program:backend] \
 command=uvicorn main:app --host 127.0.0.1 --port 8000 \
-directory=/app' > /etc/supervisor/conf.d/supervisord.conf
+directory=/app \
+autostart=true \
+autorestart=true' > /etc/supervisor/conf.d/supervisord.conf
 
-# Create directories
+# Create necessary directories
 RUN mkdir -p data ffmpeg credentials
 
-# Expose port
+# Expose port (Railway will set the PORT environment variable)
 EXPOSE $PORT
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost/health || exit 1
 
 # Start both services
 CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
