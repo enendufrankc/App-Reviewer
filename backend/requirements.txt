@@ -1,0 +1,18 @@
+# SpeechRecognition
+# pydub
+# ffmpeg-python
+# moviepy
+openai-whisper
+pandas
+google-api-python-client 
+google-auth-httplib2 
+google-auth-oauthlib
+google-auth
+PyPDF2 
+python-docx
+pydantic
+openai
+aiofiles
+fastapi
+uvicorn[standard]
+python-multipart

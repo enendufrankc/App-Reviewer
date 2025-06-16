@@ -1,0 +1,29 @@
+[build]
+builder = "dockerfile"
+
+[deploy]
+numReplicas = 1
+sleepApplication = false
+restartPolicyType = "always"
+
+# Backend service configuration
+[[services]]
+name = "backend"
+source = "backend/"
+build.dockerfile = "backend/Dockerfile"
+
+[services.healthcheck]
+path = "/health"
+timeout = 10
+interval = 30
+
+# Frontend service configuration  
+[[services]]
+name = "frontend"
+source = "frontend/"
+build.dockerfile = "frontend/Dockerfile"
+
+[services.healthcheck]
+path = "/health"
+timeout = 10
+interval = 30
