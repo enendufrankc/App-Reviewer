@@ -1,19 +1,27 @@
+[build]
+builder = "dockerfile"
+
+[environments.production]
+variables = {}
+
 [[services]]
 name = "backend"
 source = "backend/"
-build.dockerfile = "backend/Dockerfile"
 
-[services.healthcheck]
-path = "/health"
-timeout = 10
-interval = 30
+[services.build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[services.variables]
+PORT = "8000"
 
 [[services]]
 name = "frontend"
 source = "frontend/"
-build.dockerfile = "frontend/Dockerfile"
 
-[services.healthcheck]
-path = "/health"
-timeout = 10
-interval = 30
+[services.build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[services.variables]
+PORT = "80"
