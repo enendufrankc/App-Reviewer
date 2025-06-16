@@ -1,12 +1,19 @@
 import axios from 'axios';
 
-// For production, API calls go through nginx proxy to /api
-// For development, direct calls to backend
+// For Railway production, everything goes through the same domain
 const getApiUrl = () => {
-  if (import.meta.env.PROD) {
-    return '/api/v1'; // Proxied through nginx
+  // Check if we're in Railway production
+  if (window.location.hostname.includes('railway.app')) {
+    return '/api/v1';
   }
-  return 'http://localhost:8000/api/v1'; // Direct to backend in dev
+  
+  // For local development
+  if (import.meta.env.DEV) {
+    return 'http://localhost:8000/api/v1';
+  }
+  
+  // For other production environments
+  return '/api/v1';
 };
 
 const api = axios.create({
