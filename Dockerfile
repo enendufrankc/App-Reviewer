@@ -6,7 +6,7 @@ WORKDIR /app/frontend
 # Copy package files
 COPY frontend/package*.json ./
 
-# Install dependencies using npm (more reliable than bun for Docker builds)
+# Install dependencies using npm
 RUN npm install
 
 # Copy source code
@@ -40,7 +40,7 @@ COPY backend/ .
 # Copy frontend build from the builder stage
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 
-# Create nginx configuration using printf instead of heredoc
+# Create nginx configuration that uses PORT environment variable
 RUN printf 'events {\n\
     worker_connections 1024;\n\
 }\n\
@@ -59,7 +59,7 @@ http {\n\
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;\n\
 \n\
     server {\n\
-        listen 80;\n\
+        listen $PORT;\n\
         server_name _;\n\
         \n\
         location / {\n\
@@ -86,18 +86,19 @@ http {\n\
             add_header Content-Type text/plain;\n\
         }\n\
     }\n\
-}\n' > /etc/nginx/nginx.conf
+}' > /etc/nginx/nginx.conf.template
 
 # Create supervisor configuration directories
 RUN mkdir -p /etc/supervisor/conf.d /var/log/supervisor
 
-# Create supervisor configuration file using printf
+# Create supervisor configuration file
 RUN printf '[supervisord]\n\
 nodaemon=true\n\
 user=root\n\
 logfile=/var/log/supervisor/supervisord.log\n\
 pidfile=/var/run/supervisord.pid\n\
 childlogdir=/var/log/supervisor\n\
+loglevel=info\n\
 \n\
 [unix_http_server]\n\
 file=/var/run/supervisor.sock\n\
@@ -129,7 +130,7 @@ stderr_logfile=/var/log/supervisor/backend.err.log\n\
 stdout_logfile=/var/log/supervisor/backend.out.log\n\
 stderr_logfile_maxbytes=10MB\n\
 stdout_logfile_maxbytes=10MB\n\
-environment=PYTHONPATH="/app"\n' > /etc/supervisor/conf.d/supervisord.conf
+environment=PYTHONPATH="/app",PYTHONUNBUFFERED="1"\n' > /etc/supervisor/conf.d/supervisord.conf
 
 # Create necessary application directories
 RUN mkdir -p data ffmpeg uploads credentials
@@ -137,11 +138,17 @@ RUN mkdir -p data ffmpeg uploads credentials
 # Set proper permissions for credentials directory
 RUN chmod 755 /app/credentials
 
-# Create a startup script using printf
+# Create a startup script that handles PORT environment variable
 RUN printf '#!/bin/bash\n\
 set -e\n\
 \n\
 echo "=== App Reviewer Starting ==="\n\
+echo "PORT: ${PORT:-8000}"\n\
+echo "Environment: ${RAILWAY_ENVIRONMENT:-local}"\n\
+\n\
+# Set default port if not provided\n\
+export PORT=${PORT:-8000}\n\
+\n\
 echo "Checking system dependencies..."\n\
 \n\
 if command -v ffmpeg >/dev/null 2>&1; then\n\
@@ -151,6 +158,24 @@ else\n\
     echo "✗ FFmpeg not found"\n\
     exit 1\n\
 fi\n\
+\n\
+echo "✓ Checking Python environment..."\n\
+python --version\n\
+pip list | grep -E "(fastapi|uvicorn)" || echo "Warning: FastAPI/Uvicorn not found in pip list"\n\
+\n\
+echo "✓ Checking FastAPI app..."\n\
+cd /app\n\
+python -c "from main import app; print(\\"FastAPI app imported successfully\\")" || {\n\
+    echo "❌ Failed to import FastAPI app"\n\
+    echo "Contents of /app:"\n\
+    ls -la /app/\n\
+    echo "Python path:"\n\
+    python -c "import sys; print(sys.path)"\n\
+    exit 1\n\
+}\n\
+\n\
+echo "✓ Checking file structure..."\n\
+ls -la /app/\n\
 \n\
 for dir in data ffmpeg uploads credentials; do\n\
     if [ -d "/app/$dir" ]; then\n\
@@ -162,17 +187,27 @@ for dir in data ffmpeg uploads credentials; do\n\
     fi\n\
 done\n\
 \n\
+# Replace PORT placeholder in nginx config\n\
+echo "Configuring nginx for port $PORT..."\n\
+envsubst \047$PORT\047 < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf\n\
+\n\
+echo "Testing nginx configuration..."\n\
+nginx -t\n\
+\n\
 echo "Starting services with supervisor..."\n\
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /start.sh
 
 RUN chmod +x /start.sh
 
-# Expose port 80 (Railway will map this to their PORT)
-EXPOSE 80
+# Install envsubst for environment variable substitution
+RUN apt-get update && apt-get install -y gettext-base && rm -rf /var/lib/apt/lists/*
 
-# Add health check
+# Expose PORT (Railway will set this dynamically)
+EXPOSE $PORT
+
+# Add health check that uses the PORT environment variable
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Use the startup script
 CMD ["/start.sh"]
