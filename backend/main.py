@@ -1,4 +1,5 @@
 import uvicorn
+import shutil
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -30,6 +31,16 @@ async def root():
         "message": "Candidate Evaluation API",
         "version": "1.0.0",
         "docs": "/docs"
+    }
+    
+@app.get("/health")
+async def root_health_check():
+    """Root level health check endpoint for Railway"""
+    return {
+        "status": "healthy", 
+        "message": "App Reviewer Backend is running",
+        "ffmpeg_available": shutil.which("ffmpeg") is not None,
+        "version": "1.0.0"
     }
 
 if __name__ == "__main__":
