@@ -40,105 +40,96 @@ COPY backend/ .
 # Copy frontend build from the builder stage
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 
-# Create nginx configuration
-RUN cat > /etc/nginx/nginx.conf << 'EOF'
-events {
-    worker_connections 1024;
-}
-
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-    
-    sendfile on;
-    keepalive_timeout 65;
-    client_max_body_size 100M;
-    
-    # Gzip compression
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
-
-    server {
-        listen 80;
-        server_name _;
-        
-        # Serve frontend static files
-        location / {
-            root /usr/share/nginx/html;
-            index index.html index.htm;
-            try_files $uri $uri/ /index.html;
-        }
-        
-        # Proxy API requests to backend
-        location /api/ {
-            proxy_pass http://127.0.0.1:8000;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            
-            # Handle large file uploads and long processing times
-            proxy_read_timeout 300s;
-            proxy_connect_timeout 75s;
-            proxy_send_timeout 300s;
-        }
-        
-        # Health check endpoint
-        location /health {
-            access_log off;
-            return 200 "healthy\n";
-            add_header Content-Type text/plain;
-        }
-    }
-}
-EOF
+# Create nginx configuration using printf instead of heredoc
+RUN printf 'events {\n\
+    worker_connections 1024;\n\
+}\n\
+\n\
+http {\n\
+    include /etc/nginx/mime.types;\n\
+    default_type application/octet-stream;\n\
+    \n\
+    sendfile on;\n\
+    keepalive_timeout 65;\n\
+    client_max_body_size 100M;\n\
+    \n\
+    gzip on;\n\
+    gzip_vary on;\n\
+    gzip_min_length 1024;\n\
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;\n\
+\n\
+    server {\n\
+        listen 80;\n\
+        server_name _;\n\
+        \n\
+        location / {\n\
+            root /usr/share/nginx/html;\n\
+            index index.html index.htm;\n\
+            try_files $uri $uri/ /index.html;\n\
+        }\n\
+        \n\
+        location /api/ {\n\
+            proxy_pass http://127.0.0.1:8000;\n\
+            proxy_set_header Host $host;\n\
+            proxy_set_header X-Real-IP $remote_addr;\n\
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n\
+            proxy_set_header X-Forwarded-Proto $scheme;\n\
+            \n\
+            proxy_read_timeout 300s;\n\
+            proxy_connect_timeout 75s;\n\
+            proxy_send_timeout 300s;\n\
+        }\n\
+        \n\
+        location /health {\n\
+            access_log off;\n\
+            return 200 "healthy\\n";\n\
+            add_header Content-Type text/plain;\n\
+        }\n\
+    }\n\
+}\n' > /etc/nginx/nginx.conf
 
 # Create supervisor configuration directories
 RUN mkdir -p /etc/supervisor/conf.d /var/log/supervisor
 
-# Create supervisor configuration file
-RUN cat > /etc/supervisor/conf.d/supervisord.conf << 'EOF'
-[supervisord]
-nodaemon=true
-user=root
-logfile=/var/log/supervisor/supervisord.log
-pidfile=/var/run/supervisord.pid
-childlogdir=/var/log/supervisor
-
-[unix_http_server]
-file=/var/run/supervisor.sock
-chmod=0700
-
-[rpcinterface:supervisor]
-supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
-
-[supervisorctl]
-serverurl=unix:///var/run/supervisor.sock
-
-[program:nginx]
-command=nginx -g "daemon off;"
-autostart=true
-autorestart=true
-startretries=3
-stderr_logfile=/var/log/supervisor/nginx.err.log
-stdout_logfile=/var/log/supervisor/nginx.out.log
-stderr_logfile_maxbytes=10MB
-stdout_logfile_maxbytes=10MB
-
-[program:backend]
-command=uvicorn main:app --host 127.0.0.1 --port 8000
-directory=/app
-autostart=true
-autorestart=true
-startretries=3
-stderr_logfile=/var/log/supervisor/backend.err.log
-stdout_logfile=/var/log/supervisor/backend.out.log
-stderr_logfile_maxbytes=10MB
-stdout_logfile_maxbytes=10MB
-environment=PYTHONPATH="/app"
-EOF
+# Create supervisor configuration file using printf
+RUN printf '[supervisord]\n\
+nodaemon=true\n\
+user=root\n\
+logfile=/var/log/supervisor/supervisord.log\n\
+pidfile=/var/run/supervisord.pid\n\
+childlogdir=/var/log/supervisor\n\
+\n\
+[unix_http_server]\n\
+file=/var/run/supervisor.sock\n\
+chmod=0700\n\
+\n\
+[rpcinterface:supervisor]\n\
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface\n\
+\n\
+[supervisorctl]\n\
+serverurl=unix:///var/run/supervisor.sock\n\
+\n\
+[program:nginx]\n\
+command=nginx -g "daemon off;"\n\
+autostart=true\n\
+autorestart=true\n\
+startretries=3\n\
+stderr_logfile=/var/log/supervisor/nginx.err.log\n\
+stdout_logfile=/var/log/supervisor/nginx.out.log\n\
+stderr_logfile_maxbytes=10MB\n\
+stdout_logfile_maxbytes=10MB\n\
+\n\
+[program:backend]\n\
+command=uvicorn main:app --host 127.0.0.1 --port 8000\n\
+directory=/app\n\
+autostart=true\n\
+autorestart=true\n\
+startretries=3\n\
+stderr_logfile=/var/log/supervisor/backend.err.log\n\
+stdout_logfile=/var/log/supervisor/backend.out.log\n\
+stderr_logfile_maxbytes=10MB\n\
+stdout_logfile_maxbytes=10MB\n\
+environment=PYTHONPATH="/app"\n' > /etc/supervisor/conf.d/supervisord.conf
 
 # Create necessary application directories
 RUN mkdir -p data ffmpeg uploads credentials
@@ -146,38 +137,33 @@ RUN mkdir -p data ffmpeg uploads credentials
 # Set proper permissions for credentials directory
 RUN chmod 755 /app/credentials
 
-# Create a startup script for additional initialization if needed
-RUN cat > /start.sh << 'EOF'
-#!/bin/bash
-set -e
-
-echo "=== App Reviewer Starting ==="
-echo "Checking system dependencies..."
-
-# Check if ffmpeg is available
-if command -v ffmpeg >/dev/null 2>&1; then
-    echo "✓ FFmpeg is available"
-    ffmpeg -version | head -n 1
-else
-    echo "✗ FFmpeg not found"
-    exit 1
-fi
-
-# Check if required directories exist
-for dir in data ffmpeg uploads credentials; do
-    if [ -d "/app/$dir" ]; then
-        echo "✓ Directory /app/$dir exists"
-    else
-        echo "✗ Directory /app/$dir missing"
-        mkdir -p "/app/$dir"
-        echo "✓ Created directory /app/$dir"
-    fi
-done
-
-# Start supervisor
-echo "Starting services with supervisor..."
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
-EOF
+# Create a startup script using printf
+RUN printf '#!/bin/bash\n\
+set -e\n\
+\n\
+echo "=== App Reviewer Starting ==="\n\
+echo "Checking system dependencies..."\n\
+\n\
+if command -v ffmpeg >/dev/null 2>&1; then\n\
+    echo "✓ FFmpeg is available"\n\
+    ffmpeg -version | head -n 1\n\
+else\n\
+    echo "✗ FFmpeg not found"\n\
+    exit 1\n\
+fi\n\
+\n\
+for dir in data ffmpeg uploads credentials; do\n\
+    if [ -d "/app/$dir" ]; then\n\
+        echo "✓ Directory /app/$dir exists"\n\
+    else\n\
+        echo "✗ Directory /app/$dir missing"\n\
+        mkdir -p "/app/$dir"\n\
+        echo "✓ Created directory /app/$dir"\n\
+    fi\n\
+done\n\
+\n\
+echo "Starting services with supervisor..."\n\
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /start.sh
 
 RUN chmod +x /start.sh
 
