@@ -120,7 +120,7 @@ stderr_logfile_maxbytes=10MB\n\
 stdout_logfile_maxbytes=10MB\n\
 \n\
 [program:backend]\n\
-command=uvicorn main:app --host 127.0.0.1 --port 8000\n\
+command=python -m uvicorn main:app --host 127.0.0.1 --port 8000\n\
 directory=/app\n\
 autostart=true\n\
 autorestart=true\n\
