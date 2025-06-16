@@ -1,7 +1,19 @@
 [[services]]
 name = "backend"
 source = "backend/"
+build.dockerfile = "backend/Dockerfile"
+
+[services.healthcheck]
+path = "/health"
+timeout = 10
+interval = 30
 
 [[services]]
 name = "frontend"
 source = "frontend/"
+build.dockerfile = "frontend/Dockerfile"
+
+[services.healthcheck]
+path = "/health"
+timeout = 10
+interval = 30
