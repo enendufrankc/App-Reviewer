@@ -2,14 +2,19 @@
 FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/frontend
-COPY frontend/package*.json ./
-COPY frontend/bun.lockb ./
 
-# Install dependencies using npm (Railway supports npm better than bun)
+# Copy package files
+COPY frontend/package*.json ./
+
+# Remove bun lockfile since we're using npm
+# Install dependencies using npm
 RUN npm install
 
+# Copy source code
 COPY frontend/ ./
-RUN npm run build
+
+# Build the application with proper error handling
+RUN npm run build || (echo "Build failed. Checking for errors..." && npm run build --verbose && exit 1)
 
 # Python backend stage
 FROM python:3.11-slim
@@ -64,7 +69,7 @@ http { \
     } \
 }' > /etc/nginx/nginx.conf
 
-# Create supervisor configuration
+# Create supervisor configuration  
 RUN echo '[supervisord] \
 nodaemon=true \
 [program:nginx] \
@@ -80,8 +85,8 @@ autorestart=true' > /etc/supervisor/conf.d/supervisord.conf
 # Create necessary directories
 RUN mkdir -p data ffmpeg credentials
 
-# Expose port (Railway will set the PORT environment variable)
-EXPOSE $PORT
+# Expose port
+EXPOSE 80
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
