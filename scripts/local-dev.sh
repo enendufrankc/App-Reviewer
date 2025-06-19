@@ -5,26 +5,26 @@ echo "🔧 Starting local development environment..."
 
 # Check if .env file exists
 if [ ! -f .env ]; then
-    echo "❌ .env file not found! Please create one based on .env.example"
+    echo "❌ .env file not found! Please create one with your environment variables"
     exit 1
 fi
 
 # Build and start services
-echo "🏗️ Building and starting services..."
+echo "🏗️ Building and starting application..."
 docker-compose up --build -d
 
-echo "⏳ Waiting for services to be ready..."
+echo "⏳ Waiting for application to be ready..."
 sleep 10
 
 # Check service health
-echo "🔍 Checking service health..."
-docker-compose ps
+echo "🔍 Checking application health..."
+curl -f http://localhost:8000/health || echo "Health check failed"
 
 echo "✅ Development environment ready!"
-echo "🌐 Frontend: http://localhost"
-echo "🔗 Backend API: http://localhost/api"
-echo "📚 API Docs: http://localhost/api/docs"
+echo "🌐 Application: http://localhost:8000"
+echo "📚 API Docs: http://localhost:8000/docs"
+echo "🔍 Health Check: http://localhost:8000/health"
 
 # Show logs
-echo "📋 Service logs:"
+echo "📋 Application logs:"
 docker-compose logs -f

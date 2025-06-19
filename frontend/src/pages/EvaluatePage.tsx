@@ -7,9 +7,10 @@ import ProcessingStatus from '../components/ProcessingStatus';
 import { useApp } from '../context/AppContext';
 import { EvaluationResults } from '../types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '../components/ui/button';
 
 const EvaluatePage: React.FC = () => {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, user } = useApp();
   const navigate = useNavigate();
   const [results, setResults] = useState<EvaluationResults | null>(null);
 
@@ -30,6 +31,20 @@ const EvaluatePage: React.FC = () => {
 
   const isSystemReady = state.credentials.isConfigured && state.criteria.content.trim() !== '';
 
+  // Show login message but don't redirect automatically
+  if (!user?.email) {
+    return (
+      <Layout>
+        <div className="text-center py-8">
+          <p className="text-gray-500 mb-4">Please log in to access the evaluation system.</p>
+          <Button onClick={() => navigate('/')} className="mt-4">
+            Go to Login
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="space-y-8">
@@ -38,6 +53,9 @@ const EvaluatePage: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900">Evaluate YTP Applications</h1>
           <p className="mt-2 text-gray-600">
             Upload a CSV file to automatically evaluate Young Talents Programme applications using AI
+          </p>
+          <p className="text-sm text-blue-600 font-medium">
+            Logged in as: {user.email}
           </p>
         </div>
 
@@ -68,12 +86,13 @@ const EvaluatePage: React.FC = () => {
                   </div>
                 )}
               </div>
-              <button
+              <Button
                 onClick={() => navigate('/admin')}
-                className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
+                className="mt-4"
+                variant="outline"
               >
                 Go to Admin Configuration →
-              </button>
+              </Button>
             </CardContent>
           </Card>
         )}

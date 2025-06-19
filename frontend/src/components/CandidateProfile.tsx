@@ -11,6 +11,11 @@ interface CandidateProfileProps {
 }
 
 const CandidateProfile: React.FC<CandidateProfileProps> = ({ candidate }) => {
+  // Generate a unique identifier for this specific evaluation
+  const evaluationId = candidate.session_id 
+    ? `${candidate.email}-${candidate.session_id}`
+    : `${candidate.email}-${candidate.evaluation_timestamp || Date.now()}`;
+
   const getOutcomeBadgeVariant = (outcome: string) => {
     switch (outcome) {
       case 'Accepted':
@@ -79,6 +84,11 @@ const CandidateProfile: React.FC<CandidateProfileProps> = ({ candidate }) => {
             </div>
             <div className="flex items-center gap-4 text-sm text-gray-600">
               <span>Evaluated: {new Date(candidate.evaluation_timestamp).toLocaleString()}</span>
+              {candidate.session_id && (
+                <span className="bg-gray-100 px-2 py-1 rounded text-xs">
+                  Session: {candidate.session_name || candidate.session_id}
+                </span>
+              )}
               {candidate.files_processed_successfully ? (
                 <Badge variant="outline" className="text-green-700 border-green-300">Files Processed</Badge>
               ) : (

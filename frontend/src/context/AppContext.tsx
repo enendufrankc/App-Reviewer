@@ -1,6 +1,5 @@
-
-import React, { createContext, useContext, useReducer, ReactNode } from 'react';
-import { AppState, CredentialsInfo, CandidateResult, EvaluationSummary } from '../types';
+import React, { createContext, useContext, useReducer, ReactNode, useState } from 'react';
+import { AppState, CredentialsInfo, CandidateResult, EvaluationSummary, User } from '../types';
 import { toast } from 'sonner';
 
 type AppAction = 
@@ -18,7 +17,7 @@ const initialState: AppState = {
     loading: false,
   },
   criteria: {
-    content: '',
+    content: '', // Ensure this is always a string, never undefined
     loading: false,
   },
   evaluation: {
@@ -53,7 +52,11 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_CRITERIA_CONTENT':
       return {
         ...state,
-        criteria: { ...state.criteria, content: action.payload, loading: false }
+        criteria: { 
+          ...state.criteria, 
+          content: action.payload || '', // Ensure it's never undefined
+          loading: false 
+        }
       };
     case 'SET_EVALUATION_LOADING':
       return {
@@ -79,12 +82,17 @@ interface AppContextType {
   state: AppState;
   dispatch: React.Dispatch<AppAction>;
   showNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
+  currentUser: User | null;
+  setCurrentUser: (user: User | null) => void;
+  user: User | null;  // Add this for compatibility
+  setUser: (user: User | null) => void;  // Add this for compatibility
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     if (type === 'success') {
@@ -96,8 +104,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // For compatibility, use the same state for both user and currentUser
+  const setUser = (user: User | null) => {
+    setCurrentUser(user);
+  };
+
+  const value: AppContextType = {
+    state,
+    dispatch,
+    showNotification,
+    currentUser,
+    setCurrentUser,
+    user: currentUser,  // Same as currentUser
+    setUser,
+  };
+
   return (
-    <AppContext.Provider value={{ state, dispatch, showNotification }}>
+    <AppContext.Provider value={value}>
       {children}
     </AppContext.Provider>
   );
@@ -105,6 +128,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
 export function useApp() {
   const context = useContext(AppContext);
+
   if (context === undefined) {
     throw new Error('useApp must be used within an AppProvider');
   }

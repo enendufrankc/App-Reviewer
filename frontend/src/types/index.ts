@@ -10,6 +10,29 @@ export interface CredentialsInfo {
   last_modified: string;
 }
 
+export interface EvaluationSession {
+  id: string;
+  name: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  total_candidates: number;
+  processed_candidates: number;
+  accepted_count: number;
+  rejected_count: number;
+  error_count: number;
+  current_batch: number;
+  total_batches: number;
+  progress_percentage: number;
+  created_at: string;
+  completed_at?: string;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+  created_at: string;
+}
+
 export interface CandidateResult {
   outcome: 'Accepted' | 'Rejected' | 'Error';
   score: number;
@@ -48,6 +71,20 @@ export interface CandidateResult {
   processing_errors: string[];
   evaluation_timestamp: string;
   files_processed_successfully: boolean;
+  session_id: string;
+}
+
+export interface BatchProcessingStatus {
+  batch_number: number;
+  batch_size: number;
+  total_processed: number;
+  total_candidates: number;
+  summary: {
+    accepted: number;
+    rejected: number;
+    errors: number;
+  };
+  progress_percentage: number;
 }
 
 export interface EvaluationSummary {

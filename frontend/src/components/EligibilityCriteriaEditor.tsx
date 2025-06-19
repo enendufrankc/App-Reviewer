@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Save, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { evaluationService } from '../services/evaluationService';
 import { useApp } from '../context/AppContext';
+import { useUser } from '../context/UserContext';
 import LoadingSpinner from './LoadingSpinner';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -9,6 +10,7 @@ import { Textarea } from './ui/textarea';
 
 const EligibilityCriteriaEditor: React.FC = () => {
   const { state, dispatch, showNotification } = useApp();
+  const { userEmail } = useUser();
   const [content, setContent] = useState('');
   const [isValid, setIsValid] = useState(true);
   const [validationMessage, setValidationMessage] = useState('');
@@ -21,13 +23,24 @@ const EligibilityCriteriaEditor: React.FC = () => {
   const loadCriteria = async () => {
     dispatch({ type: 'SET_CRITERIA_LOADING', payload: true });
     try {
+      // Use general criteria endpoint for now
       const response = await evaluationService.getCriteria();
-      const criteriaContent = response.data.content;
+      const criteriaContent = response.data.content || '';
       setContent(criteriaContent);
       dispatch({ type: 'SET_CRITERIA_CONTENT', payload: criteriaContent });
     } catch (error: any) {
+      console.error('Failed to load criteria:', error);
       const message = error.response?.data?.detail || 'Failed to load criteria';
       showNotification(message, 'error');
+      // Set default content if loading fails
+      const defaultContent = `Young Talents Programme Eligibility Criteria
+→ First Class or Second Class Upper degree (or equivalent)
+→ Must be under 30 years old at the time of application
+→ Master's degree holders are welcome to apply
+→ Strong interest in leadership, entrepreneurship, and career development`;
+      setContent(defaultContent);
+      dispatch({ type: 'SET_CRITERIA_CONTENT', payload: defaultContent });
+    } finally {
       dispatch({ type: 'SET_CRITERIA_LOADING', payload: false });
     }
   };
@@ -64,13 +77,21 @@ const EligibilityCriteriaEditor: React.FC = () => {
       return;
     }
 
+    if (!content.trim()) {
+      showNotification('Content cannot be empty', 'error');
+      return;
+    }
+
     setSaving(true);
     try {
+      console.log('Saving criteria:', content);
+      // Use general criteria endpoint for now
       await evaluationService.updateCriteria(content);
       dispatch({ type: 'SET_CRITERIA_CONTENT', payload: content });
       showNotification('Eligibility criteria updated successfully!', 'success');
     } catch (error: any) {
-      const message = error.response?.data?.detail || 'Failed to save criteria';
+      console.error('Save failed:', error);
+      const message = error.response?.data?.detail || error.message || 'Failed to save criteria';
       showNotification(message, 'error');
     } finally {
       setSaving(false);

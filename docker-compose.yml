@@ -1,45 +1,23 @@
 version: '3.8'
 
 services:
-  backend:
+  app:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
-    container_name: app-reviewer-backend
+    container_name: app-reviewer-local
+    ports:
+      - "8000:8000"
     environment:
       - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
       - AZURE_OPENAI_MODEL=${AZURE_OPENAI_MODEL}
+      - PORT=8000
     volumes:
       - ./backend/data:/app/data
-      # Don't mount credentials.json - let users upload via API
-    networks:
-      - app-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: app-reviewer-frontend
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-    networks:
-      - app-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-networks:
-  app-network:
-    driver: bridge

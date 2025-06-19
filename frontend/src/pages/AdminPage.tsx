@@ -9,10 +9,26 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 
 const AdminPage: React.FC = () => {
-  const { state } = useApp();
+  const { state, user } = useApp();
   const navigate = useNavigate();
 
-  const canProceed = state.credentials.isConfigured && state.criteria.content.trim() !== '';
+  // If not logged in, show message but don't redirect automatically
+  if (!user?.email) {
+    return (
+      <Layout>
+        <div className="text-center py-8">
+          <p className="text-gray-500 mb-4">Please log in to access admin configuration.</p>
+          <Button onClick={() => navigate('/')} className="mt-4">
+            Go to Login
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Safely check if criteria content exists and is not empty
+  const hasCriteriaContent = state.criteria.content && state.criteria.content.trim() !== '';
+  const canProceed = state.credentials.isConfigured && hasCriteriaContent;
 
   return (
     <Layout>
@@ -21,8 +37,11 @@ const AdminPage: React.FC = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Admin Configuration</h1>
           <p className="mt-2 text-gray-600">
-            Set up your system before evaluating Young Talents Programme applications
+            Set up your personal settings for evaluating Young Talents Programme applications
           </p>
+          <div className="mt-2 text-sm text-blue-600">
+            Logged in as: {user.email}
+          </div>
         </div>
 
         {/* Configuration Steps */}
@@ -48,11 +67,11 @@ const AdminPage: React.FC = () => {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                state.criteria.content.trim() !== '' 
+                hasCriteriaContent
                   ? 'bg-green-100 text-green-800' 
                   : 'bg-blue-100 text-blue-800'
               }`}>
-                {state.criteria.content.trim() !== '' ? <CheckCircle className="h-4 w-4" /> : '2'}
+                {hasCriteriaContent ? <CheckCircle className="h-4 w-4" /> : '2'}
               </div>
               <h2 className="text-xl font-semibold text-gray-900">
                 YTP Eligibility Criteria

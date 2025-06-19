@@ -1,5 +1,6 @@
 import uvicorn
 import shutil
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -8,11 +9,37 @@ import os
 
 from src.api.routes import router
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize database on startup"""
+    try:
+        from src.config.settings import AppConfig
+        from src.services.database_service import DatabaseService
+        
+        config = AppConfig()
+        # Fix: Check for database_key instead of supabase_service_key
+        if config.supabase_url and config.database_key:
+            db_service = DatabaseService(config)
+            if db_service.is_available():
+                await db_service.create_tables()
+                print("✅ Database connection verified")
+            else:
+                print("⚠️  Database service not available")
+        else:
+            print("⚠️  Database not configured properly")
+            print(f"    SUPABASE_URL: {'✅' if config.supabase_url else '❌'}")
+            print(f"    DATABASE_KEY: {'✅' if config.database_key else '❌'}")
+    except Exception as e:
+        print(f"❌ Database initialization failed: {str(e)}")
+    
+    yield
+
 # Create FastAPI app
 app = FastAPI(
     title="Candidate Evaluation API",
     description="AI-powered candidate evaluation system with CV and video processing",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Add CORS middleware

@@ -1,19 +1,31 @@
 import os
 import asyncio
 import tempfile
-from typing import Dict, Any, List
+from typing import Dict, Any, List, AsyncGenerator, Optional, TYPE_CHECKING
 import pandas as pd
+import json
+from datetime import datetime, timezone  # Fix the import
 
 from src.models.candidate_models import ProcessingResult
 from src.services.drive_service import GoogleDriveService
 from src.services.file_processor import FileProcessor
 from src.services.ai_service import AIEvaluationService
 
+if TYPE_CHECKING:
+    from src.services.database_service import DatabaseService
+
 class CandidateProcessor:
-    def __init__(self, drive_service: GoogleDriveService, file_processor: FileProcessor, ai_service: AIEvaluationService):
+    def __init__(
+        self, 
+        drive_service: GoogleDriveService, 
+        file_processor: FileProcessor, 
+        ai_service: AIEvaluationService,
+        batch_size: int = 10
+    ):
         self.drive_service = drive_service
         self.file_processor = file_processor
         self.ai_service = ai_service
+        self.batch_size = batch_size
     
     def create_candidate_narrative(self, email: str, data: pd.DataFrame) -> str:
         """Create comprehensive text narrative for a candidate"""
@@ -160,12 +172,165 @@ class CandidateProcessor:
             result.errors.append(f"Video processing error: {str(e)}")
             await self.file_processor.safe_delete_file(temp_video_path)
     
-    async def create_comprehensive_evaluation(self, email: str, data: pd.DataFrame) -> Dict[str, Any]:
-        """Create comprehensive candidate evaluation"""
+    async def process_candidates_in_batches(
+        self, 
+        data: pd.DataFrame, 
+        session_id: str,
+        user_id: str,
+        db_service: "DatabaseService",
+        progress_callback = None
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Process candidates in batches and yield results"""
+        
+        emails = data['Email address'].dropna().tolist()
+        total_candidates = len(emails)
+        processed_count = 0
+        accepted_count = 0
+        rejected_count = 0
+        error_count = 0
+        
+        # Process in batches
+        for batch_idx in range(0, total_candidates, self.batch_size):
+            batch_emails = emails[batch_idx:batch_idx + self.batch_size]
+            batch_number = (batch_idx // self.batch_size) + 1
+            batch_results = []
+            
+            print(f"Processing batch {batch_number}: candidates {batch_idx + 1} to {min(batch_idx + self.batch_size, total_candidates)}")
+            
+            # Process batch with controlled concurrency
+            semaphore = asyncio.Semaphore(3)  # Limit concurrent processing
+            
+            async def process_with_semaphore(email):
+                async with semaphore:
+                    try:
+                        print(f"Processing candidate: {email}")
+                        result = await self.create_comprehensive_evaluation(email, data, user_id, db_service)
+                        
+                        # Convert result to database format and save
+                        db_result = self._convert_to_db_format(result)
+                        await db_service.save_candidate_evaluation(session_id, db_result)
+                        
+                        print(f"Completed: {email} - {result.get('outcome', 'Unknown')}")
+                        return result
+                    except Exception as e:
+                        print(f"Error processing {email}: {str(e)}")
+                        error_result = {
+                            "error": f"Processing failed for {email}: {str(e)}", 
+                            "email": email,
+                            "outcome": "Error",
+                            "score": 0.0,
+                            "rationale": f"Processing failed: {str(e)}"
+                        }
+                        
+                        # Save error to database
+                        db_error = self._convert_to_db_format(error_result)
+                        await db_service.save_candidate_evaluation(session_id, db_error)
+                        return error_result
+            
+            tasks = [process_with_semaphore(email) for email in batch_emails]
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Update counters
+            for result in batch_results:
+                if isinstance(result, Exception):
+                    error_count += 1
+                elif isinstance(result, dict):
+                    if 'error' in result or result.get('outcome') == 'Error':
+                        error_count += 1
+                    elif result.get('outcome') == 'Accepted':
+                        accepted_count += 1
+                    elif result.get('outcome') == 'Rejected':
+                        rejected_count += 1
+                
+                processed_count += 1
+            
+            # Update session progress
+            await db_service.update_session_progress(
+                session_id, processed_count, accepted_count, rejected_count, error_count, batch_number
+            )
+            
+            # Call progress callback if provided
+            if progress_callback:
+                await progress_callback(processed_count, total_candidates, batch_results)
+            
+            # Yield batch results
+            yield {
+                "batch_number": batch_number,
+                "batch_size": len(batch_results),
+                "batch_results": batch_results,
+                "total_processed": processed_count,
+                "total_candidates": total_candidates,
+                "summary": {
+                    "accepted": accepted_count,
+                    "rejected": rejected_count,
+                    "errors": error_count
+                },
+                "progress_percentage": (processed_count / total_candidates * 100) if total_candidates > 0 else 0
+            }
+            
+            print(f"Batch {batch_number} completed. Progress: {processed_count}/{total_candidates}")
+            
+            # Optional: Add delay between batches to prevent overwhelming the system
+            await asyncio.sleep(2)
+
+    def _convert_to_db_format(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert comprehensive evaluation result to database format"""
+        # Map to actual database column names
+        db_data = {
+            "outcome": result.get("outcome", "Error"),
+            "score": float(result.get("score", 0.0)),
+            "rationale": result.get("rationale", "No rationale provided"),
+            "timestamp": result.get("timestamp", ""),  # This column exists in DB
+            "email": result.get("email", ""),
+            "name": result.get("name", ""),
+            "gender": result.get("gender", ""),
+            "date_of_birth": result.get("date_of_birth", ""),
+            "marital_status": result.get("marital_status", ""),
+            "religion": result.get("religion", ""),
+            "phone_number": result.get("phone_number", ""),
+            "residential_address": result.get("residential_address", ""),
+            "current_employment": result.get("current_employment", ""),
+            "employment_category": result.get("employment_category", ""),
+            "company_address": result.get("company_address", ""),
+            "university_attended": result.get("university_attended", ""),
+            "undergraduate_degree_type": result.get("undergraduate_degree_type", ""),
+            "undergraduate_programme": result.get("undergraduate_programme", ""),
+            "undergraduate_class": result.get("undergraduate_class", ""),
+            "undergraduate_completion_date": result.get("undergraduate_completion_date", ""),
+            "postgraduate_degree_type": result.get("postgraduate_degree_type", ""),
+            "postgraduate_programme": result.get("postgraduate_programme", ""),
+            "postgraduate_class": result.get("postgraduate_class", ""),
+            "postgraduate_completion_date": result.get("postgraduate_completion_date", ""),
+            "education_qualifications": result.get("education_qualifications", ""),
+            "professional_qualifications": result.get("professional_qualifications", ""),
+            "career_interests": result.get("career_interests", ""),
+            "msa_interests": result.get("msa_interest", ""),  # Note: DB has msa_interests, not msa_interest
+            "previous_applications": result.get("previous_applications", ""),
+            "candidate_essay": result.get("candidate_essay", ""),
+            "cv_url": result.get("cv_url", ""),
+            "video_url": result.get("video_url", ""),
+            "cv_text": result.get("cv_text", ""),
+            "video_transcript": result.get("video_transcript", ""),
+            "processing_errors": json.dumps(result.get("processing_errors", [])),
+            "evaluation_timestamp": datetime.now(timezone.utc).isoformat(),  # Fixed import
+            "files_processed_successfully": bool(result.get("files_processed_successfully", False))
+        }
+        
+        print(f"🔧 DB format conversion: {result.get('email', 'Unknown')} -> {db_data['outcome']} ({db_data['score']})")
+        return db_data
+
+    async def create_comprehensive_evaluation(
+        self, 
+        email: str, 
+        data: pd.DataFrame, 
+        user_id: str = None,
+        db_service: "DatabaseService" = None
+    ) -> Dict[str, Any]:
+        """Create comprehensive candidate evaluation with user-specific criteria"""
         candidate = data[data['Email address'] == email]
         
         if candidate.empty:
-            return {"error": f"No candidate found with email: {email}"}
+            return {"error": f"No candidate found with email: {email}", "email": email}
         
         candidate = candidate.iloc[0]
         
@@ -189,8 +354,10 @@ class CandidateProcessor:
         Errors encountered: {', '.join(file_results.errors) if file_results.errors else 'None'}
         """
         
-        # Get AI evaluation
-        evaluation_result = await self.ai_service.evaluate_candidate(enhanced_narrative)
+        # Get AI evaluation with user-specific criteria
+        evaluation_result = await self.ai_service.evaluate_candidate(
+            enhanced_narrative, user_id, db_service
+        )
         
         # Helper function to convert pandas types to JSON serializable types
         def safe_convert(value):
@@ -203,7 +370,7 @@ class CandidateProcessor:
             else:
                 return str(value)
         
-        # Create comprehensive result
+        # Create comprehensive result (same as before)
         comprehensive_result = {
             # AI Evaluation Results
             "outcome": evaluation_result.get("outcome", "Error"),
@@ -256,7 +423,12 @@ class CandidateProcessor:
         
         return comprehensive_result
 
-    async def process_all_candidates(self, data: pd.DataFrame) -> List[Dict[str, Any]]:
+    async def process_all_candidates(
+        self, 
+        data: pd.DataFrame, 
+        user_id: str = None,
+        db_service: "DatabaseService" = None
+    ) -> List[Dict[str, Any]]:
         """Process all candidates asynchronously with controlled concurrency"""
         semaphore = asyncio.Semaphore(3)  # Limit concurrent processing to 3
         
@@ -264,7 +436,7 @@ class CandidateProcessor:
             async with semaphore:
                 print(f"Processing candidate: {email}")
                 try:
-                    result = await self.create_comprehensive_evaluation(email, data)
+                    result = await self.create_comprehensive_evaluation(email, data, user_id, db_service)
                     print(f"Completed: {email}")
                     return result
                 except Exception as e:

@@ -16,3 +16,12 @@ aiofiles
 fastapi
 uvicorn[standard]
 python-multipart
+supabase==2.9.1
+gotrue==2.9.2
+python-dotenv
+# SQLAlchemy dependencies - keeping for compatibility but not using
+sqlalchemy
+alembic
+asyncpg
+cryptography
+sqlalchemy[asyncio]

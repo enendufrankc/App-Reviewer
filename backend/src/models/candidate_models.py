@@ -49,7 +49,7 @@ class ComprehensiveEvaluation(BaseModel):
     education_qualifications: Optional[str] = None
     professional_qualifications: Optional[str] = None
     career_interests: Optional[str] = None
-    msa_interests: Optional[str] = None
+    msa_interests: Optional[str] = None  # Fixed: use msa_interests to match DB
     previous_applications: Optional[str] = None
     candidate_essay: str
     cv_url: str
@@ -72,3 +72,4 @@ class CandidateEvaluationResponse(BaseModel):
     message: str
     results: List[dict]
     summary: dict
+    session_id: Optional[str] = None

@@ -14,7 +14,7 @@ interface CsvUploadComponentProps {
 }
 
 const CsvUploadComponent: React.FC<CsvUploadComponentProps> = ({ onFileUploaded }) => {
-  const { showNotification } = useApp();
+  const { showNotification, user } = useApp();
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -24,15 +24,33 @@ const CsvUploadComponent: React.FC<CsvUploadComponentProps> = ({ onFileUploaded 
     const file = acceptedFiles[0];
     if (!file) return;
 
+    // Validate file
     if (!file.name.toLowerCase().endsWith('.csv')) {
       showNotification('Please upload a CSV file', 'error');
       return;
     }
 
-    if (file.size > 50 * 1024 * 1024) { // 50MB limit
+    if (file.size > 50 * 1024 * 1024) {
       showNotification('File size must be less than 50MB', 'error');
       return;
     }
+
+    // CRITICAL: Ensure user is logged in
+    if (!user?.email) {
+      console.error('❌ No logged-in user available for evaluation');
+      showNotification('Please log in to upload and evaluate files. User authentication required.', 'error');
+      return;
+    }
+
+    // The logged-in user email (e.g., admin@lbs.edu.ng)
+    const loggedInUserEmail = user.email;
+    const sessionName = `YTP Evaluation ${new Date().toLocaleDateString()} - ${user.name || user.email.split('@')[0]}`;
+    
+    console.log('🔍 EVALUATION CONTEXT:');
+    console.log(`  📧 LOGGED-IN USER: ${loggedInUserEmail}`);
+    console.log(`  📁 CSV FILE: ${file.name} (${file.size} bytes)`);
+    console.log(`  📋 SESSION: ${sessionName}`);
+    console.log(`  🎯 CSV will contain CANDIDATE emails (different from logged-in user)`);
 
     setUploading(true);
     setUploadProgress(0);
@@ -41,28 +59,45 @@ const CsvUploadComponent: React.FC<CsvUploadComponentProps> = ({ onFileUploaded 
     try {
       // Simulate upload progress
       const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 95) {
-            clearInterval(progressInterval);
-            return 95;
-          }
-          return prev + 5;
-        });
+        setUploadProgress(prev => prev >= 95 ? 95 : prev + 5);
       }, 200);
 
-      setProcessingStatus('Processing candidates...');
-      const response = await evaluationService.evaluateCandidates(file);
+      setProcessingStatus('Processing candidates from CSV...');
+      
+      console.log(`🚀 Sending evaluation request:`);
+      console.log(`   - Logged-in user: ${loggedInUserEmail}`);
+      console.log(`   - CSV file: ${file.name}`);
+      console.log(`   - Session: ${sessionName}`);
+      
+      // Send request with LOGGED-IN USER email
+      const response = await evaluationService.evaluateCandidates(
+        file, 
+        loggedInUserEmail,  // This is the LOGGED-IN USER email
+        sessionName
+      );
       
       clearInterval(progressInterval);
       setUploadProgress(100);
       setProcessingStatus('Evaluation completed!');
       
-      showNotification(`Successfully processed ${response.data.summary.total_processed} YTP applications`, 'success');
+      showNotification(
+        `Successfully processed ${response.data.summary.total_processed} YTP applications`, 
+        'success'
+      );
       onFileUploaded(response.data);
+      
     } catch (error: any) {
-      const message = error.response?.data?.detail || 'Failed to process candidates';
-      showNotification(message, 'error');
-      setProcessingStatus('Processing failed');
+      console.error('❌ Evaluation failed:', error);
+      
+      let errorMessage = 'Failed to process candidates';
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      showNotification(`Evaluation failed: ${errorMessage}`, 'error');
+      setProcessingStatus(`Processing failed: ${errorMessage}`);
     } finally {
       setTimeout(() => {
         setUploading(false);
@@ -70,7 +105,29 @@ const CsvUploadComponent: React.FC<CsvUploadComponentProps> = ({ onFileUploaded 
         setProcessingStatus('');
       }, 2000);
     }
-  }, [showNotification, onFileUploaded]);
+  }, [showNotification, onFileUploaded, user]);
+
+  // Don't render upload area if user is not logged in
+  if (!user?.email) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5" />
+            Upload YTP Application CSV
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+            <p className="text-lg font-medium text-gray-900 mb-2">Login Required</p>
+            <p className="text-gray-600">Please log in to upload and evaluate YTP applications.</p>
+            <p className="text-xs text-gray-500 mt-2">Debug: User object = {JSON.stringify(user)}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -91,6 +148,14 @@ const CsvUploadComponent: React.FC<CsvUploadComponentProps> = ({ onFileUploaded 
         </CardTitle>
         <CardDescription>
           Upload a CSV file containing Young Talents Programme application information for evaluation
+          <br />
+          <span className="text-blue-600 font-medium">
+            ✅ Logged in as: {user.email}
+          </span>
+          <br />
+          <span className="text-gray-600 text-sm">
+            CSV should contain candidate emails in 'Email address' column
+          </span>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">

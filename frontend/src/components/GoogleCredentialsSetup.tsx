@@ -82,6 +82,7 @@ const GoogleCredentialsSetup: React.FC = () => {
       const response = await credentialsService.getCredentialsInfo();
       dispatch({ type: 'SET_CREDENTIALS_INFO', payload: response.data.credentials_info });
     } catch (error: any) {
+      console.error('Failed to load credentials info:', error);
       dispatch({ type: 'SET_CREDENTIALS_INFO', payload: null });
     }
   };

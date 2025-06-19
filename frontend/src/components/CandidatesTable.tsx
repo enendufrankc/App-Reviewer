@@ -148,7 +148,7 @@ const CandidatesTable: React.FC<CandidatesTableProps> = ({ candidates, onViewCan
             <TableBody>
               {paginatedCandidates.map((candidate, index) => (
                 <TableRow 
-                  key={candidate.email} 
+                  key={`${candidate.email}-${candidate.session_id || index}`} // Use email + session_id for unique keys
                   className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
                   onClick={() => onViewCandidate(candidate)}
                 >
